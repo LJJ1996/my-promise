@@ -1,3 +1,29 @@
+// 第三版：实现 promise 的异步链式调用
+// const p1 = new MyPromise((resolved, rejected) => {
+//   resolved('我 resolved 了');
+// });
+
+// p1.then((res) => {
+//   console.log(res);
+//   return new MyPromise((resolved, rejected) => {
+//     setTimeout(() => {
+//       resolved('then1');
+//     }, 1000)
+//   });
+// })
+// .then((res) => {
+//   console.log(res);
+//   return new MyPromise((resolved, rejected) => {
+//     setTimeout(() => {
+//       resolved('then2');
+//     }, 1000)
+//   });
+// })
+// .then((res) => {
+//   console.log(res);
+//   return 'then3';
+// })
+
 class MyPromise {
 	static PENDING = "pending"
 	static RESOLVED = "resolved"
@@ -61,51 +87,100 @@ class MyPromise {
 						throw reason
 				  }
 
-		let p1 = new Promise((resolve, reject) => {
+		let p1 = null
+		p1 = new MyPromise((resolve, reject) => {
 			// 当状态是等待态的时候，需要将两个参数塞入到对应的回调数组中
 			// 当状态改变之后，在执行回调函数中的函数
 			if (this.status === MyPromise.PENDING) {
 				this.resolveQueues.push((value) => {
-          let x = onFulfilled(value);
-          resolve(x);
-        })
+					let x = onFulfilled(value)
+					// resolve(x);
+					resolvePromise(p1, x, resolve, reject)
+				})
 				this.rejectQueues.push((reason) => {
-          let x = onRejected(reason);
-          resolve(x);
-        })
+					let x = onRejected(reason)
+					// resolve(x);
+					resolvePromise(p1, x, resolve, reject)
+				})
 			}
 
 			// 状态是成功态，直接就调用 onFulfilled 函数
 			if (this.status === MyPromise.RESOLVED) {
 				let x = onFulfilled(this.value)
-        resolve(x);
+				// resolve(x);
+				resolvePromise(p1, x, resolve, reject)
 			}
 
 			// 状态是成功态，直接就调用 onRejected 函数
 			if (this.status === MyPromise.REJECTED) {
 				let x = onRejected(this.reason)
-        reject && reject(x);
+				// reject && reject(x);
+				resolvePromise(p1, x, resolve, reject)
 			}
 		})
-    return p1;
+		return p1
 	}
 }
 
-let p1 = new MyPromise((resolve, reject) => {
-	resolve("test")
-})
-p1.then((res) => {
-	console.log(res)
-  return 't1';
-}).then((res) => {
-	console.log(res)
-  return 't2';
-})
+const resolvePromise = (promise, x, resolve, reject) => {
+	debugger
+	if (x instanceof MyPromise) {
+		const then = x.then
+		if (x.status == MyPromise.PENDING) {
+			then.call(
+				x,
+				(y) => resolvePromise(promise, y, resolve, reject),
+				(err) => reject(err)
+			)
+		} else {
+			x.then(resolve, reject)
+		}
+	} else {
+		resolve(x)
+	}
+}
 
-let p2 = new MyPromise((resolve, reject) => {
-	resolve("test")
+// let p1 = new MyPromise((resolve, reject) => {
+// 	resolve("test")
+// })
+// p1.then((res) => {
+// 	console.log(res)
+// 	return "t1"
+// }).then((res) => {
+// 	console.log(res)
+// 	return "t2"
+// })
+
+// let p2 = new MyPromise((resolve, reject) => {
+// 	resolve("test")
+// })
+// p2.then(12).then((res) => {
+// 	console.log(res)
+// 	return "t2"
+// })
+
+
+const p1 = new MyPromise((resolved, rejected) => {
+  resolved('我 resolved 了');
+});
+
+p1.then((res) => {
+  console.log(res);
+  return new MyPromise((resolved, rejected) => {
+    setTimeout(() => {
+      resolved('then1');
+    }, 1000)
+  });
 })
-p2.then(12).then((res) => {
-	console.log(res)
-  return 't2';
+.then((res) => {
+  console.log(res);
+  return new MyPromise((resolved, rejected) => {
+    setTimeout(() => {
+      rejected('then2');
+    }, 1000)
+  });
+})
+.then((res) => {
+  console.log(res);
+  return 'then3';
 })
