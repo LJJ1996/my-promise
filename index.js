@@ -46,7 +46,10 @@ class MyPromise {
 				this.status = MyPromise.RESOLVED
 				this.value = value
 				// this.onFulfilled && this.onFulfilled(this.value)
-				this.resolveQueues && this.resolveQueues.forEach((fn) => fn(this.value))
+				queueMicrotask(() => {
+					this.resolveQueues &&
+						this.resolveQueues.forEach((fn) => fn(this.value))
+				})
 			}
 		}
 
@@ -55,7 +58,11 @@ class MyPromise {
 				this.status = MyPromise.REJECTED
 				this.reason = error
 				// this.onRejected && this.onRejected(this.reason)
-				this.rejectQueues && this.rejectQueues.forEach((fn) => fn(this.reason))
+
+				queueMicrotask(() => {
+					this.rejectQueues &&
+						this.rejectQueues.forEach((fn) => fn(this.reason))
+				})
 			}
 		}
 
@@ -106,16 +113,20 @@ class MyPromise {
 
 			// 状态是成功态，直接就调用 onFulfilled 函数
 			if (this.status === MyPromise.RESOLVED) {
-				let x = onFulfilled(this.value)
-				// resolve(x);
-				resolvePromise(p1, x, resolve, reject)
+				queueMicrotask(() => {
+					let x = onFulfilled(this.value)
+					// resolve(x);
+					resolvePromise(p1, x, resolve, reject)
+				})
 			}
 
 			// 状态是成功态，直接就调用 onRejected 函数
 			if (this.status === MyPromise.REJECTED) {
-				let x = onRejected(this.reason)
-				// reject && reject(x);
-				resolvePromise(p1, x, resolve, reject)
+				queueMicrotask(() => {
+					let x = onRejected(this.reason)
+					// reject && reject(x);
+					resolvePromise(p1, x, resolve, reject)
+				})
 			}
 		})
 		return p1
@@ -123,17 +134,51 @@ class MyPromise {
 }
 
 const resolvePromise = (promise, x, resolve, reject) => {
-	debugger
-	if (x instanceof MyPromise) {
-		const then = x.then
-		if (x.status == MyPromise.PENDING) {
-			then.call(
-				x,
-				(y) => resolvePromise(promise, y, resolve, reject),
-				(err) => reject(err)
-			)
-		} else {
-			x.then(resolve, reject)
+	// if (x instanceof MyPromise) {
+	// 	const then = x.then
+	// 	if (x.status == MyPromise.PENDING) {
+	// 		then.call(
+	// 			x,
+	// 			(y) => resolvePromise(promise, y, resolve, reject),
+	// 			(err) => reject(err)
+	// 		)
+	// 	} else {
+	// 		x.then(resolve, reject)
+	// 	}
+	// } else {
+	// 	resolve(x)
+	// }
+
+	if (x === promise2) {
+		return reject(new TypeError("Chaining cycle detected for promise"))
+	}
+
+	let called
+
+	if (x !== null && (typeof x === "object" || typeof x == "function")) {
+		try {
+			let then = x.then
+			if (typeof then === "function") {
+				then.call(
+					x,
+					(y) => {
+						if (called) return
+						called = true
+						resolvePromise(promise, y, resolve, reject)
+					},
+					(err) => {
+						if (called) return
+						called = true
+						reject(err)
+					}
+				)
+			} else {
+				resolve(x)
+			}
+		} catch (err) {
+			if (called) return
+			called = true
+			reject(err)
 		}
 	} else {
 		resolve(x)
@@ -159,28 +204,31 @@ const resolvePromise = (promise, x, resolve, reject) => {
 // 	return "t2"
 // })
 
-
 const p1 = new MyPromise((resolved, rejected) => {
-  resolved('我 resolved 了');
-});
+	resolved("我 resolved 了")
+})
+
+setTimeout(() => {
+	console.log("setTimeout 1")
+}, 0)
 
 p1.then((res) => {
-  console.log(res);
-  return new MyPromise((resolved, rejected) => {
-    setTimeout(() => {
-      resolved('then1');
-    }, 1000)
-  });
+	console.log(res)
+	return new MyPromise((resolved, rejected) => {
+		resolved("then1")
+	})
 })
-.then((res) => {
-  console.log(res);
-  return new MyPromise((resolved, rejected) => {
-    setTimeout(() => {
-      rejected('then2');
-    }, 1000)
-  });
-})
-.then((res) => {
-  console.log(res);
-  return 'then3';
-})
+	.then((res) => {
+		console.log(res)
+		return "then2"
+	})
+	.then(
+		(res) => {
+			console.log("resolve: ", res)
+			return "then3"
+		},
+		(res) => {
+			console.log("reject: ", res)
+			return "then3"
+		}
+	)
